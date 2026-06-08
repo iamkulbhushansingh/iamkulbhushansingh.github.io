@@ -12,12 +12,14 @@ No-reference (NR) video quality assessment system that scores video quality with
 **Codec coverage:** H.264 · AV1 · MPEG2
 
 **Approach:**
+
 - Contrastive learning on codec-distorted frame pairs
 - Learned perceptual quality features robust to compression artifacts
 - Per-frame and temporal quality scoring
 - Integration with FFmpeg decode pipeline for real-time analysis
 
 **Key differentiators:**
+
 - No reference content needed (blind quality estimation)
 - Codec-aware: separate feature spaces per codec family
 - H.264 deep focus: P/B-frame artifact patterns, quantization noise

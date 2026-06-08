@@ -12,6 +12,7 @@ High-precision scene-change detection system built in C++ for broadcast and surv
 **Results:** 97% precision · 100% recall
 
 **Approach:**
+
 - Temporal difference analysis across decoded frame buffers
 - Adaptive thresholding tuned per content type (sports, news, static camera)
 - Histogram-based fast rejection path for uniform/low-motion scenes
