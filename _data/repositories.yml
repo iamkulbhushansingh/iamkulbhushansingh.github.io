@@ -4,5 +4,5 @@ github_users:
 repo_description_lines_max: 2
 
 github_repos:
+  - iamkulbhushansingh/iamkulbhushansingh.github.io
   - Lightning-AI/torchmetrics
-  - opencv/opencv_contrib
