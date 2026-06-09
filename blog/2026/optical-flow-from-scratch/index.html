@@ -1,0 +1,259 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> Optical flow from scratch: the solve is trivial, the box filter is everything | Kulbhushan Singh </title> <meta name="author" content="Kulbhushan Singh"> <meta name="description" content="Dense Lucas-Kanade from first principles — brightness constancy, the aperture problem, the 2×2 solve, and why swapping one loop for a box filter gives 250× speedup with identical output."> <meta name="keywords" content="video quality, computer vision, C++, opencv, HPC, optical flow, video codec"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="data:image/svg+xml,&lt;svg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22&gt;&lt;text%20y=%22.9em%22%20font-size=%2290%22&gt;%E2%9A%9B%EF%B8%8F&lt;/text&gt;&lt;/svg&gt;"> <link rel="stylesheet" href="/assets/css/main.css?v=f0b101217084a90093badfe99ff9a7d1"> <link rel="canonical" href="https://iamkulbhushansingh.github.io/blog/2026/optical-flow-from-scratch/"> <script src="/assets/js/theme.js?v=7af685e2ba20b37fef545c97b8064050"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Kulbhushan Singh </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="/teaching/">teaching </a> </li> <li class="nav-item "> <a class="nav-link" href="/people/">people </a> </li> <li class="nav-item dropdown "> <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-nav-dropdown-toggle="true" aria-haspopup="true" aria-expanded="false">submenus </a> <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown"> <a class="dropdown-item " href="/books/">bookshelf</a> <div class="dropdown-divider"></div> <a class="dropdown-item " href="/blog/">blog</a> </div> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">Optical flow from scratch: the solve is trivial, the box filter is everything</h1> <p class="post-meta"> Created on June 09, 2026 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/computer-vision"> <i class="fa-solid fa-hashtag fa-sm"></i> computer-vision</a>   <a href="/blog/tag/optical-flow"> <i class="fa-solid fa-hashtag fa-sm"></i> optical-flow</a>   <a href="/blog/tag/lucas-kanade"> <i class="fa-solid fa-hashtag fa-sm"></i> lucas-kanade</a>   <a href="/blog/tag/image-processing"> <i class="fa-solid fa-hashtag fa-sm"></i> image-processing</a>   <a href="/blog/tag/python"> <i class="fa-solid fa-hashtag fa-sm"></i> python</a>   <a href="/blog/tag/performance"> <i class="fa-solid fa-hashtag fa-sm"></i> performance</a>   ·   <a href="/blog/category/math-under-the-pixels"> <i class="fa-solid fa-tag fa-sm"></i> math-under-the-pixels</a> </p> </header> <article class="post-content"> <div id="markdown-content"> <blockquote> <p><strong>512×512 image, 5.66 px max motion, zero neural net.</strong> Single-scale Lucas-Kanade: EPE <strong>2.792 px</strong>. Add a four-level pyramid: <strong>0.752 px</strong>. Change one function call (loop → box filter): <strong>250× faster</strong>. Same output.</p> </blockquote> <p>That’s the whole post. Everything below is <em>why</em>.</p> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/flow_hero-480.webp 480w,/assets/img/blog/optical-flow/flow_hero-800.webp 800w,/assets/img/blog/optical-flow/flow_hero-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/flow_hero.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Dense flow on the camera image. Hue = direction of motion, saturation = speed. Every pixel has a vector. No model, no GPU.</figcaption> </figure> </div> </div> <hr> <h2 id="what-is-optical-flow">What is optical flow?</h2> <p>Two frames of video. For every pixel in frame 1, find where it moved in frame 2. Output: a 2D vector field — one <code class="language-plaintext highlighter-rouge">(u, v)</code> per pixel.</p> <p>That’s it. No segmentation, no depth, no semantics. Just: <em>where did each point go?</em></p> <p>This is the front end of:</p> <ul> <li> <strong>Visual odometry / SLAM</strong> — track points, recover camera pose</li> <li> <strong>ADAS / drones</strong> — ego-motion, moving-obstacle detection, time-to-collision</li> <li> <strong>Video codecs</strong> — motion estimation inside every H.264/AV1 encoder</li> <li> <strong>Video stabilization</strong> — estimate camera shake, warp it out</li> </ul> <p>All of them need it fast and predictable. That’s the engineering problem.</p> <hr> <h2 id="step-1--what-does-the-algorithm-actually-see">Step 1 — what does the algorithm actually see?</h2> <p>Before any math: look at what you’re working with.</p> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig1_gradients-480.webp 480w,/assets/img/blog/optical-flow/fig1_gradients-800.webp 800w,/assets/img/blog/optical-flow/fig1_gradients-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig1_gradients.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Frame 1, Frame 2, and the three gradient images Iₓ, I_y, I_t. The algorithm never touches colour — just these.</figcaption> </figure> </div> </div> <p>The three gradient images are the raw ingredients:</p> <ul> <li> <strong>Iₓ</strong> — horizontal intensity change. Red/blue = sign of the change.</li> <li> <strong>I_y</strong> — vertical intensity change.</li> <li> <strong>I_t</strong> — temporal change (frame2 − frame1). Where pixels moved, you see signal here.</li> </ul> <p>The entire optical flow algorithm is built from these three images. That’s all it has.</p> <hr> <h2 id="step-2--the-constraint-brightness-constancy">Step 2 — the constraint: brightness constancy</h2> <p>The founding assumption: <em>a pixel keeps its intensity as it moves.</em></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>I(x, y, t)  =  I(x + u, y + v, t + 1)
+</code></pre></div></div> <p>Expand the right side with a first-order Taylor series:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>I(x+u, y+v, t+1)  ≈  I(x,y,t) + Iₓ·u + I_y·v + I_t
+</code></pre></div></div> <p>Substitute and the <code class="language-plaintext highlighter-rouge">I(x,y,t)</code> cancels:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Iₓ·u  +  I_y·v  +  I_t  =  0          … (1)
+</code></pre></div></div> <p>This is the <strong>optical flow constraint equation</strong>. One equation. Two unknowns (<code class="language-plaintext highlighter-rouge">u</code>, <code class="language-plaintext highlighter-rouge">v</code>).</p> <h3 id="the-aperture-problem">The aperture problem</h3> <p>One equation, two unknowns — you can’t solve it. That’s not a bug; it’s geometry.</p> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig2_aperture-480.webp 480w,/assets/img/blog/optical-flow/fig2_aperture-800.webp 800w,/assets/img/blog/optical-flow/fig2_aperture-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig2_aperture.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Edge patch: all red arrows satisfy the constraint. The algorithm genuinely cannot pick one. Corner patch: two independent edges cross — only one arrow fits.</figcaption> </figure> </div> </div> <p>Through a small window over an edge, you can only measure motion <em>perpendicular</em> to that edge — the component along the edge is invisible. This is the <strong>aperture problem</strong>.</p> <p>At a corner both <code class="language-plaintext highlighter-rouge">Iₓ</code> and <code class="language-plaintext highlighter-rouge">I_y</code> are large, so you get two independent constraints. Their intersection is a unique solution. This is why feature trackers pick corners.</p> <hr> <h2 id="step-3--lucas-kanade-borrow-from-the-neighbours">Step 3 — Lucas-Kanade: borrow from the neighbours</h2> <p><strong>Key assumption:</strong> flow is approximately constant over a small <code class="language-plaintext highlighter-rouge">k×k</code> window.</p> <p>Every pixel in the window gives one constraint equation. <code class="language-plaintext highlighter-rouge">k²</code> equations, 2 unknowns → overdetermined → least squares. The normal equations collapse to a <strong>2×2 system</strong>:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>⎡ ΣIₓ²    ΣIₓI_y ⎤ ⎡u⎤     ⎡ ΣIₓI_t ⎤
+⎢                  ⎥ ⎢ ⎥  = -⎢         ⎥
+⎣ ΣIₓI_y  ΣI_y²  ⎦ ⎣v⎦     ⎣ ΣI_yI_t ⎦
+
+       A               [u,v]        b
+</code></pre></div></div> <p>The sums run over the <code class="language-plaintext highlighter-rouge">k×k</code> window. <code class="language-plaintext highlighter-rouge">A</code> is the <strong>structure tensor</strong> — the same matrix Harris and Shi-Tomasi use to find corners. Its smallest eigenvalue tells you how well the patch constrains flow:</p> <table> <thead> <tr> <th style="text-align: center">min eigenvalue</th> <th>meaning</th> </tr> </thead> <tbody> <tr> <td style="text-align: center">≈ 0</td> <td>flat region — no texture, flow unknowable</td> </tr> <tr> <td style="text-align: center">one large, one ≈ 0</td> <td>edge — aperture problem</td> </tr> <tr> <td style="text-align: center">both large</td> <td>corner — fully determined, trackable</td> </tr> </tbody> </table> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig3_structure_tensor-480.webp 480w,/assets/img/blog/optical-flow/fig3_structure_tensor-800.webp 800w,/assets/img/blog/optical-flow/fig3_structure_tensor-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig3_structure_tensor.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Min-eigenvalue map. Bright = trackable. Most pixels live in the hopeless flat zone — the histogram's spike at zero confirms it.</figcaption> </figure> </div> </div> <h3 id="regularization-instead-of-a-hard-reject">Regularization instead of a hard reject</h3> <p>When <code class="language-plaintext highlighter-rouge">A</code> is singular, the solve blows up. The typical fix is a threshold on the determinant — but that creates a hard discontinuity and silently zeroes marginal patches.</p> <p>Better: add a tiny Tikhonov term <code class="language-plaintext highlighter-rouge">λI</code> to <code class="language-plaintext highlighter-rouge">A</code>:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(A + λI) · [u,v]  =  -b        λ = 1e-9
+</code></pre></div></div> <p>Now <code class="language-plaintext highlighter-rouge">A + λI</code> is always invertible. In flat regions the flow decays to zero (honest “I don’t know”) instead of crashing. The <code class="language-plaintext highlighter-rouge">λ</code> is small enough to not bias results where texture exists.</p> <hr> <h2 id="step-4--the-performance-trick-this-is-the-whole-point">Step 4 — the performance trick (this is the whole point)</h2> <p>To compute the 2×2 system you need <strong>five windowed sums</strong>: <code class="language-plaintext highlighter-rouge">ΣIₓ²</code>, <code class="language-plaintext highlighter-rouge">ΣI_y²</code>, <code class="language-plaintext highlighter-rouge">ΣIₓI_y</code>, <code class="language-plaintext highlighter-rouge">ΣIₓI_t</code>, <code class="language-plaintext highlighter-rouge">ΣI_yI_t</code>.</p> <p><strong>Naive:</strong> loop over the <code class="language-plaintext highlighter-rouge">k×k</code> window per pixel. Cost: <strong>O(k²) per pixel</strong>.</p> <p><strong>Key insight:</strong> a sum over a sliding rectangular window <em>is a box filter</em> — and a box filter runs in <strong>O(1) per pixel</strong> via a running prefix sum, regardless of window size. Replace five nested loops with five filter calls:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Before — O(k²) per pixel, explicit loop
+</span><span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">h</span><span class="o">-</span><span class="n">r</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">w</span><span class="o">-</span><span class="n">r</span><span class="p">):</span>
+        <span class="n">sxx</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="nf">sum</span><span class="p">(</span><span class="n">Ix</span><span class="p">[</span><span class="n">y</span><span class="o">-</span><span class="n">r</span><span class="p">:</span><span class="n">y</span><span class="o">+</span><span class="n">r</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">x</span><span class="o">-</span><span class="n">r</span><span class="p">:</span><span class="n">x</span><span class="o">+</span><span class="n">r</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>   <span class="c1"># k² ops
+</span>        <span class="bp">...</span>
+
+<span class="c1"># After — O(1) per pixel
+</span><span class="n">box</span>  <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nf">uniform_filter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">win</span><span class="p">)</span>
+<span class="n">Sxx</span><span class="p">,</span> <span class="n">Syy</span><span class="p">,</span> <span class="n">Sxy</span> <span class="o">=</span> <span class="nf">box</span><span class="p">(</span><span class="n">Ix</span><span class="o">*</span><span class="n">Ix</span><span class="p">),</span> <span class="nf">box</span><span class="p">(</span><span class="n">Iy</span><span class="o">*</span><span class="n">Iy</span><span class="p">),</span> <span class="nf">box</span><span class="p">(</span><span class="n">Ix</span><span class="o">*</span><span class="n">Iy</span><span class="p">)</span>
+<span class="n">Sxt</span><span class="p">,</span> <span class="n">Syt</span>      <span class="o">=</span> <span class="nf">box</span><span class="p">(</span><span class="n">Ix</span><span class="o">*</span><span class="n">It</span><span class="p">),</span> <span class="nf">box</span><span class="p">(</span><span class="n">Iy</span><span class="o">*</span><span class="n">It</span><span class="p">)</span>
+</code></pre></div></div> <p>Same five products. Same windowed averages. Numerically identical output. The difference:</p> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig8_speedup-480.webp 480w,/assets/img/blog/optical-flow/fig8_speedup-800.webp 800w,/assets/img/blog/optical-flow/fig8_speedup-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig8_speedup.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Naive O(k²)/px vs box filter O(1)/px. The speedup is flat across window sizes — the box filter time is truly O(1).</figcaption> </figure> </div> </div> <table> <thead> <tr> <th style="text-align: center">window</th> <th style="text-align: center">naive O(k²)/px</th> <th style="text-align: center">box filter O(1)/px</th> <th style="text-align: center">speedup</th> </tr> </thead> <tbody> <tr> <td style="text-align: center">9×9</td> <td style="text-align: center">0.187 s</td> <td style="text-align: center">0.0007 s</td> <td style="text-align: center"><strong>277×</strong></td> </tr> <tr> <td style="text-align: center">15×15</td> <td style="text-align: center">0.183 s</td> <td style="text-align: center">0.0007 s</td> <td style="text-align: center"><strong>264×</strong></td> </tr> <tr> <td style="text-align: center">25×25</td> <td style="text-align: center">0.165 s</td> <td style="text-align: center">0.0008 s</td> <td style="text-align: center"><strong>217×</strong></td> </tr> </tbody> </table> <p>The naive time is roughly <strong>flat</strong> across window sizes — you’re still looping over a fixed crop. The box filter time is also flat — because it’s <code class="language-plaintext highlighter-rouge">O(1)</code> regardless of window size.</p> <blockquote> <p><strong>Knowing the math is the optimization.</strong> The 2×2 solve is cheap. The bottleneck is the five sums. The bottleneck has an O(1) solution. One function call.</p> </blockquote> <hr> <h2 id="step-5--why-single-scale-fails-and-what-pyramids-do">Step 5 — why single-scale fails and what pyramids do</h2> <p>The Taylor expansion is only valid for <strong>sub-pixel motion</strong>. On a 512×512 image with motion up to <strong>5.66 px</strong>:</p> <ul> <li>Single-scale LK: <strong>EPE = 2.792 px</strong> — clearly broken</li> <li>Pyramidal LK (4 levels): <strong>EPE = 0.752 px</strong> — 3.7× better</li> </ul> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig6_single_vs_pyramid-480.webp 480w,/assets/img/blog/optical-flow/fig6_single_vs_pyramid-800.webp 800w,/assets/img/blog/optical-flow/fig6_single_vs_pyramid-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig6_single_vs_pyramid.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Single-scale (EPE 2.792px) vs pyramidal LK (EPE 0.752px) on the same motion field. The single-scale result is noisy and wrong; the pyramid recovers the true motion.</figcaption> </figure> </div> </div> <h3 id="how-the-pyramid-works">How the pyramid works</h3> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig4_pyramid-480.webp 480w,/assets/img/blog/optical-flow/fig4_pyramid-800.webp 800w,/assets/img/blog/optical-flow/fig4_pyramid-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig4_pyramid.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Four pyramid levels. At the coarsest level (32×32) the 5.66px motion becomes sub-pixel — the Taylor approximation holds there.</figcaption> </figure> </div> </div> <p>At the coarsest level (32×32), the full 5.66 px motion is now sub-pixel relative to that scale. LK works there. Then:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>for each level l from coarse to fine:
+    upsample flow estimate × 2
+    warp Frame 1 by –flow  (align it toward Frame 2)
+    run LK on the residual
+    add residual to accumulated flow
+    apply median filter  (flow is smooth; kills outlier vectors)
+</code></pre></div></div> <p>Each level only estimates the <em>residual</em> motion after the coarser level accounts for the bulk. Motion at each level stays small enough for the linear approximation.</p> <p><strong>One sign to get right:</strong> warp Frame 1 by <strong>−flow</strong>, not +flow, to align it toward Frame 2. Flip the sign and every refinement step <em>adds</em> error — I watched the flow diverge 2 → 5 → 10 → 20 px across pyramid levels before catching it.</p> <hr> <h2 id="step-6--four-motion-patterns-one-color-wheel">Step 6 — four motion patterns, one color wheel</h2> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig5_patterns-480.webp 480w,/assets/img/blog/optical-flow/fig5_patterns-800.webp 800w,/assets/img/blog/optical-flow/fig5_patterns-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig5_patterns.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">Translation, rotation, zoom, shear — each produces a distinct colour signature. Zoom/divergence lights up the full colour wheel because motion points outward in every direction.</figcaption> </figure> </div> </div> <table> <thead> <tr> <th>pattern</th> <th style="text-align: center">EPE</th> <th>real-world appearance</th> </tr> </thead> <tbody> <tr> <td>Translation (u=+3, v=+1)</td> <td style="text-align: center">0.525 px</td> <td>pan shot, drone lateral</td> </tr> <tr> <td>Rotation (ω=0.03 rad/frame)</td> <td style="text-align: center">1.179 px</td> <td>spinning object, camera yaw</td> </tr> <tr> <td>Zoom / divergence (s=0.02)</td> <td style="text-align: center">0.950 px</td> <td>forward motion — ADAS ego-motion</td> </tr> <tr> <td>Shear (∂u/∂y=0.04)</td> <td style="text-align: center">1.158 px</td> <td>parallax, conveyor belt</td> </tr> </tbody> </table> <hr> <h2 id="step-7--where-does-it-actually-fail">Step 7 — where does it actually fail?</h2> <div class="row mt-3"> <div class="col-sm mt-3 mt-md-0"> <figure> <picture> <source class="responsive-img-srcset" srcset="/assets/img/blog/optical-flow/fig7_error_map-480.webp 480w,/assets/img/blog/optical-flow/fig7_error_map-800.webp 800w,/assets/img/blog/optical-flow/fig7_error_map-1400.webp 1400w," type="image/webp" sizes="95vw"></source> <img src="/assets/img/blog/optical-flow/fig7_error_map.png" class="img-fluid rounded" width="100%" height="auto" data-zoomable="" loading="lazy" onerror="this.onerror=null; document.querySelectorAll('.responsive-img-srcset').forEach(function (n) { n.remove(); });"> </picture> <figcaption class="caption">EPE heatmap. Bright = high error. Failure concentrated at occlusion boundaries and textureless regions — both are structurally understood failure modes.</figcaption> </figure> </div> </div> <p>Highest error at:</p> <ul> <li> <strong>Occlusion boundaries</strong> — the pixel being tracked disappears behind another surface. Brightness constancy breaks.</li> <li> <strong>Textureless regions</strong> — structure tensor is near-singular. LK decays to zero; if the GT is non-zero, that’s error.</li> </ul> <p><strong>Median EPE: 0.131 px.</strong> Most pixels are tracked very accurately. The tail drags the mean.</p> <p>These failure modes have documented classical fixes — forward-backward consistency check for occlusions, larger windows or spatial regularization for texture-less regions. No neural network needed.</p> <hr> <h2 id="the-math-in-one-place">The math in one place</h2> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. Compute gradients (central differences):
+   Iₓ[y,x] = 0.5 * (I1[y, x+1] - I1[y, x-1])
+   I_y[y,x] = 0.5 * (I1[y+1, x] - I1[y-1, x])
+   I_t[y,x] = I2[y,x] - I1[y,x]
+
+2. Form products:
+   P1 = Iₓ², P2 = I_y², P3 = Iₓ·I_y, P4 = Iₓ·I_t, P5 = I_y·I_t
+
+3. Windowed sum (box filter, O(1)/px):
+   Sxx = box(P1),  Syy = box(P2),  Sxy = box(P3)
+   Sxt = box(P4),  Syt = box(P5)
+
+4. Solve (+ regularization):
+   det = Sxx·Syy - Sxy² + λ            λ = 1e-9
+   u   = -(Syy·Sxt - Sxy·Syt) / det
+   v   = -(Sxx·Syt - Sxy·Sxt) / det
+</code></pre></div></div> <p>Four steps. Three of them are element-wise array ops. The fourth is the box filter.</p> <hr> <h2 id="where-this-goes-visual-odometry">Where this goes: visual odometry</h2> <p>Dense flow gives you a motion vector per pixel. If you instead track <em>feature points</em> and recover the camera’s 3D motion from those correspondences, you have <strong>visual odometry</strong> — the core of SLAM, drone navigation, and ADAS. The next post builds that pipeline: feature detection → LK tracking → essential matrix → pose recovery → trajectory on KITTI. This implementation feeds straight in.</p> <hr> <h2 id="the-fast-version--where-the-real-moat-is">The fast version — where the real moat is</h2> <p>The Python <code class="language-plaintext highlighter-rouge">uniform_filter</code> already leans on compiled C with SIMD internally. The next rung is hand-written AVX2: 8 pixels per instruction, threaded over rows.</p> <div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Sxx, Syy, Sxy, Sxt, Syt are __m256 — 8 pixels per register</span>
+<span class="n">__m256</span> <span class="n">det</span>  <span class="o">=</span> <span class="n">_mm256_add_ps</span><span class="p">(</span>
+                  <span class="n">_mm256_fmsub_ps</span><span class="p">(</span><span class="n">Sxx</span><span class="p">,</span> <span class="n">Syy</span><span class="p">,</span> <span class="n">_mm256_mul_ps</span><span class="p">(</span><span class="n">Sxy</span><span class="p">,</span> <span class="n">Sxy</span><span class="p">)),</span>
+                  <span class="n">reg</span><span class="p">);</span>
+<span class="n">__m256</span> <span class="n">inv</span>  <span class="o">=</span> <span class="n">_mm256_div_ps</span><span class="p">(</span><span class="n">one</span><span class="p">,</span> <span class="n">det</span><span class="p">);</span>
+<span class="n">__m256</span> <span class="n">u</span>    <span class="o">=</span> <span class="n">_mm256_mul_ps</span><span class="p">(</span>
+                  <span class="n">_mm256_fnmadd_ps</span><span class="p">(</span><span class="n">Syy</span><span class="p">,</span> <span class="n">Sxt</span><span class="p">,</span> <span class="n">_mm256_mul_ps</span><span class="p">(</span><span class="n">Sxy</span><span class="p">,</span> <span class="n">Syt</span><span class="p">)),</span> <span class="n">inv</span><span class="p">);</span>
+<span class="n">__m256</span> <span class="n">v</span>    <span class="o">=</span> <span class="n">_mm256_mul_ps</span><span class="p">(</span>
+                  <span class="n">_mm256_fnmadd_ps</span><span class="p">(</span><span class="n">Sxx</span><span class="p">,</span> <span class="n">Syt</span><span class="p">,</span> <span class="n">_mm256_mul_ps</span><span class="p">(</span><span class="n">Sxy</span><span class="p">,</span> <span class="n">Sxt</span><span class="p">)),</span> <span class="n">inv</span><span class="p">);</span>
+</code></pre></div></div> <p>That version, threaded over rows, runs real-time on 1080p. Python is for the figures; C++ is for the point.</p> <hr> <h2 id="run-it-yourself">Run it yourself</h2> <p>Pure NumPy + SciPy — no OpenCV, no PyTorch, no pretrained weights:</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone https://github.com/iamkulbhushansingh/image-math-teardowns
+<span class="nb">cd </span>06-optical-flow
+pip <span class="nb">install </span>numpy scipy matplotlib scikit-image imageio
+
+python optical_flow.py                         <span class="c"># synthetic self-test → EPE + figure</span>
+python optical_flow.py frame1.png frame2.png   <span class="c"># any two frames → colour flow field</span>
+python bench.py                                <span class="c"># naive vs box-filter speedup table</span>
+python figures.py                              <span class="c"># regenerate all 9 blog figures</span>
+</code></pre></div></div> <p>Extract two frames from any clip:</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ffmpeg <span class="nt">-i</span> clip.mp4 <span class="nt">-vf</span> <span class="s2">"select=eq(n</span><span class="se">\,</span><span class="s2">100)+eq(n</span><span class="se">\,</span><span class="s2">101)"</span> <span class="nt">-vsync</span> 0 frame%d.png
+</code></pre></div></div> <hr> <p><em>Part of the <a href="/blog/">Math Under the Pixels</a> series — classical CV, from the equations up.</em> <em>Next: Features + RANSAC — robust matching when half your correspondences are garbage.</em></p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">Enjoy Reading This Article?</h2> <p class="mb-2">Here are some more articles you might like to read next:</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="https://blog.google/technology/ai/google-gemini-update-flash-ai-assistant-io-2024/" target="_blank" rel="noopener noreferrer">Google Gemini updates: Flash 1.5, Gemma 2 and Project Astra</a> <svg width="1rem" height="1rem" viewbox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"> <path d="M17 13.5v6H5v-12h6m3-3h6v6m0-6-9 9" class="icon_svg-stroke" stroke="#999" stroke-width="1.5" fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round"></path> </svg> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="https://medium.com/@al-folio/displaying-external-posts-on-your-al-folio-blog-b60a1d241a0a?source=rss-17feae71c3c4------2" target="_blank" rel="noopener noreferrer">Displaying External Posts on Your al-folio Blog</a> <svg width="1rem" height="1rem" viewbox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"> <path d="M17 13.5v6H5v-12h6m3-3h6v6m0-6-9 9" class="icon_svg-stroke" stroke="#999" stroke-width="1.5" fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round"></path> </svg> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Kulbhushan Singh. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. Photos from <a href="https://unsplash.com" target="_blank" rel="external nofollow noopener">Unsplash</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script defer src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6" crossorigin="anonymous"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "Open-source contributions and personal projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "GitHub profile and open-source repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-teaching",
+          title: "teaching",
+          description: "Course materials, schedules, and resources for classes taught.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/teaching/";
+          },
+        },{id: "nav-people",
+          title: "people",
+          description: "members of the lab or group",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/people/";
+          },
+        },{id: "dropdown-bookshelf",
+              title: "bookshelf",
+              description: "",
+              section: "Dropdown",
+              handler: () => {
+                window.location.href = "/books/";
+              },
+            },{id: "dropdown-blog",
+              title: "blog",
+              description: "",
+              section: "Dropdown",
+              handler: () => {
+                window.location.href = "/blog/";
+              },
+            },{id: "post-optical-flow-from-scratch-the-solve-is-trivial-the-box-filter-is-everything",
+        
+          title: "Optical flow from scratch: the solve is trivial, the box filter is everything...",
+        
+        description: "Dense Lucas-Kanade from first principles — brightness constancy, the aperture problem, the 2×2 solve, and why swapping one loop for a box filter gives 250× speedup with identical output.",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/optical-flow-from-scratch/";
+          
+        },
+      },{id: "post-google-gemini-updates-flash-1-5-gemma-2-and-project-astra",
+        
+          title: 'Google Gemini updates: Flash 1.5, Gemma 2 and Project Astra <svg width="1.2rem" height="1.2rem" top=".5rem" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M17 13.5v6H5v-12h6m3-3h6v6m0-6-9 9" class="icon_svg-stroke" stroke="#999" stroke-width="1.5" fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+        
+        description: "We’re sharing updates across our Gemini family of models and a glimpse of Project Astra, our vision for the future of AI assistants.",
+        section: "Posts",
+        handler: () => {
+          
+            window.open("https://blog.google/technology/ai/google-gemini-update-flash-ai-assistant-io-2024/", "_blank");
+          
+        },
+      },{id: "post-displaying-external-posts-on-your-al-folio-blog",
+        
+          title: 'Displaying External Posts on Your al-folio Blog <svg width="1.2rem" height="1.2rem" top=".5rem" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M17 13.5v6H5v-12h6m3-3h6v6m0-6-9 9" class="icon_svg-stroke" stroke="#999" stroke-width="1.5" fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.open("https://medium.com/@al-folio/displaying-external-posts-on-your-al-folio-blog-b60a1d241a0a?source=rss-17feae71c3c4------2", "_blank");
+          
+        },
+      },{id: "books-the-godfather",
+          title: 'The Godfather',
+          description: "",
+          section: "Books",handler: () => {
+              window.location.href = "/books/the_godfather/";
+            },},{id: "news-merged-pr-3196-https-github-com-lightning-ai-torchmetrics-pull-3196-in-lightning-ai-torchmetrics-fixed-nan-propagation-bug-in-binary-multiclass-and-multilabel-classification-metrics",
+          title: 'Merged [PR #3196](https://github.com/Lightning-AI/torchmetrics/pull/3196) in Lightning-AI/torchmetrics — fixed NaN propagation bug in binary, multiclass,...',
+          description: "",
+          section: "News",},{id: "news-merged-pr-3226-https-github-com-lightning-ai-torchmetrics-pull-3226-in-lightning-ai-torchmetrics-added-reduction-39-none-39-support-to-the-visual-information-fidelity-vif-metric",
+          title: 'Merged [PR #3226](https://github.com/Lightning-AI/torchmetrics/pull/3226) in Lightning-AI/torchmetrics — added `reduction=&amp;#39;none&amp;#39;` support to the Visual Information...',
+          description: "",
+          section: "News",},{id: "projects-torchmetrics-open-source-contributions",
+          title: 'TorchMetrics Open Source Contributions',
+          description: "VIF metric reduction support and classification metric NaN fix merged into Lightning-AI/torchmetrics",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/5_project/";
+            },},{
+        id: 'social-cv',
+        title: 'CV',
+        section: 'Socials',
+        handler: () => {
+          window.open("/assets/pdf/KulbhushanSingh_CV.pdf", "_blank");
+        },
+      },{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%69%61%6D%6B%75%6C%62%68%75%73%68%61%6E%73%69%6E%67%68@%67%6D%61%69%6C.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/iamkulbhushansingh", "_blank");
+        },
+      },{
+        id: 'social-linkedin',
+        title: 'LinkedIn',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://www.linkedin.com/in/iamkulbhushansingh", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
