@@ -1,11 +1,10 @@
 name: Integration tests
 
 on:
+  workflow_dispatch: # manual trigger only — template integration tests need al-folio demo posts
   push:
     branches:
-      - master
-      - main
-      - v1.0-dev
+      - disabled-template-tests
     paths:
       - "Gemfile"
       - "Gemfile.lock"
@@ -21,22 +20,7 @@ on:
       - ".github/workflows/unit-tests.yml"
   pull_request:
     branches:
-      - master
-      - main
-      - v1.0-dev
-    paths:
-      - "Gemfile"
-      - "Gemfile.lock"
-      - "_config.yml"
-      - "_data/**"
-      - "_pages/**"
-      - "_posts/**"
-      - "_projects/**"
-      - "assets/**"
-      - "test/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/unit-tests.yml"
+      - disabled-template-tests
 
 jobs:
   comments-integration-tests:
