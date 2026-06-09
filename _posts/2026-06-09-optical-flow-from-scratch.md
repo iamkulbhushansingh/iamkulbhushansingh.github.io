@@ -13,7 +13,7 @@ featured: true
 > Single-scale Lucas-Kanade: EPE **2.792 px**. Add a four-level pyramid: **0.752 px**.
 > Change one function call (loop → box filter): **250× faster**. Same output.
 
-That's the whole post. Everything below is *why*.
+That's the whole post. Everything below is _why_.
 
 <div class="row mt-3">
   <div class="col-sm mt-3 mt-md-0">
@@ -27,9 +27,10 @@ That's the whole post. Everything below is *why*.
 
 Two frames of video. For every pixel in frame 1, find where it moved in frame 2. Output: a 2D vector field — one `(u, v)` per pixel.
 
-That's it. No segmentation, no depth, no semantics. Just: *where did each point go?*
+That's it. No segmentation, no depth, no semantics. Just: _where did each point go?_
 
 This is the front end of:
+
 - **Visual odometry / SLAM** — track points, recover camera pose
 - **ADAS / drones** — ego-motion, moving-obstacle detection, time-to-collision
 - **Video codecs** — motion estimation inside every H.264/AV1 encoder
@@ -61,7 +62,7 @@ The entire optical flow algorithm is built from these three images. That's all i
 
 ## Step 2 — the constraint: brightness constancy
 
-The founding assumption: *a pixel keeps its intensity as it moves.*
+The founding assumption: _a pixel keeps its intensity as it moves._
 
 ```
 I(x, y, t)  =  I(x + u, y + v, t + 1)
@@ -91,7 +92,7 @@ One equation, two unknowns — you can't solve it. That's not a bug; it's geomet
   </div>
 </div>
 
-Through a small window over an edge, you can only measure motion *perpendicular* to that edge — the component along the edge is invisible. This is the **aperture problem**.
+Through a small window over an edge, you can only measure motion _perpendicular_ to that edge — the component along the edge is invisible. This is the **aperture problem**.
 
 At a corner both `Iₓ` and `I_y` are large, so you get two independent constraints. Their intersection is a unique solution. This is why feature trackers pick corners.
 
@@ -153,11 +154,11 @@ Solve with Cramer's rule — two divisions. Done.
 
 The sums run over the `k×k` window. `A` is the **structure tensor** — the same matrix Harris and Shi-Tomasi use to find corners. Its smallest eigenvalue tells you how well the patch constrains flow:
 
-| min eigenvalue | meaning |
-|:---:|---|
-| ≈ 0 | flat region — no texture, flow unknowable |
-| one large, one ≈ 0 | edge — aperture problem |
-| both large | corner — fully determined, trackable |
+|   min eigenvalue   | meaning                                   |
+| :----------------: | ----------------------------------------- |
+|        ≈ 0         | flat region — no texture, flow unknowable |
+| one large, one ≈ 0 | edge — aperture problem                   |
+|     both large     | corner — fully determined, trackable      |
 
 <div class="row mt-3">
   <div class="col-sm mt-3 mt-md-0">
@@ -187,7 +188,7 @@ To compute the 2×2 system you need **five windowed sums**: `ΣIₓ²`, `ΣI_y²
 
 For a 512×512 image with `k=15`: that's 512 × 512 × 225 ≈ **59 million additions**. Per sum. Five sums total.
 
-**Key insight:** a sum over a sliding rectangular window *is a box filter* — and a box filter runs in **O(1) per pixel** via a prefix sum table, regardless of window size.
+**Key insight:** a sum over a sliding rectangular window _is a box filter_ — and a box filter runs in **O(1) per pixel** via a prefix sum table, regardless of window size.
 
 ### How the prefix sum works
 
@@ -249,11 +250,11 @@ Same five products. Same windowed averages. Numerically identical output. The di
   </div>
 </div>
 
-| window | naive O(k²)/px | box filter O(1)/px | speedup |
-|:---:|:---:|:---:|:---:|
-| 9×9    | 0.187 s | 0.0007 s | **277×** |
-| 15×15  | 0.183 s | 0.0007 s | **264×** |
-| 25×25  | 0.165 s | 0.0008 s | **217×** |
+| window | naive O(k²)/px | box filter O(1)/px | speedup  |
+| :----: | :------------: | :----------------: | :------: |
+|  9×9   |    0.187 s     |      0.0007 s      | **277×** |
+| 15×15  |    0.183 s     |      0.0007 s      | **264×** |
+| 25×25  |    0.165 s     |      0.0008 s      | **217×** |
 
 The naive time is roughly **flat** across window sizes — you're still looping over a fixed crop. The box filter time is also flat — because it's `O(1)` regardless of window size.
 
@@ -293,9 +294,9 @@ for each level l from coarse to fine:
     apply median filter  (flow is smooth; kills outlier vectors)
 ```
 
-Each level only estimates the *residual* motion after the coarser level accounts for the bulk. Motion at each level stays small enough for the linear approximation.
+Each level only estimates the _residual_ motion after the coarser level accounts for the bulk. Motion at each level stays small enough for the linear approximation.
 
-**One sign to get right:** warp Frame 1 by **−flow**, not +flow, to align it toward Frame 2. Flip the sign and every refinement step *adds* error — I watched the flow diverge 2 → 5 → 10 → 20 px across pyramid levels before catching it.
+**One sign to get right:** warp Frame 1 by **−flow**, not +flow, to align it toward Frame 2. Flip the sign and every refinement step _adds_ error — I watched the flow diverge 2 → 5 → 10 → 20 px across pyramid levels before catching it.
 
 ---
 
@@ -307,12 +308,12 @@ Each level only estimates the *residual* motion after the coarser level accounts
   </div>
 </div>
 
-| pattern | EPE | real-world appearance |
-|---|:---:|---|
-| Translation (u=+3, v=+1) | 0.525 px | pan shot, drone lateral |
-| Rotation (ω=0.03 rad/frame) | 1.179 px | spinning object, camera yaw |
-| Zoom / divergence (s=0.02) | 0.950 px | forward motion — ADAS ego-motion |
-| Shear (∂u/∂y=0.04) | 1.158 px | parallax, conveyor belt |
+| pattern                     |   EPE    | real-world appearance            |
+| --------------------------- | :------: | -------------------------------- |
+| Translation (u=+3, v=+1)    | 0.525 px | pan shot, drone lateral          |
+| Rotation (ω=0.03 rad/frame) | 1.179 px | spinning object, camera yaw      |
+| Zoom / divergence (s=0.02)  | 0.950 px | forward motion — ADAS ego-motion |
+| Shear (∂u/∂y=0.04)          | 1.158 px | parallax, conveyor belt          |
 
 ---
 
@@ -325,6 +326,7 @@ Each level only estimates the *residual* motion after the coarser level accounts
 </div>
 
 Highest error at:
+
 - **Occlusion boundaries** — the pixel being tracked disappears behind another surface. Brightness constancy breaks.
 - **Textureless regions** — structure tensor is near-singular. LK decays to zero; if the GT is non-zero, that's error.
 
@@ -361,7 +363,7 @@ Four steps. Three of them are element-wise array ops. The fourth is the box filt
 
 ## Where this goes: visual odometry
 
-Dense flow gives you a motion vector per pixel. If you instead track *feature points* and recover the camera's 3D motion from those correspondences, you have **visual odometry** — the core of SLAM, drone navigation, and ADAS. The next post builds that pipeline: feature detection → LK tracking → essential matrix → pose recovery → trajectory on KITTI. This implementation feeds straight in.
+Dense flow gives you a motion vector per pixel. If you instead track _feature points_ and recover the camera's 3D motion from those correspondences, you have **visual odometry** — the core of SLAM, drone navigation, and ADAS. The next post builds that pipeline: feature detection → LK tracking → essential matrix → pose recovery → trajectory on KITTI. This implementation feeds straight in.
 
 ---
 
@@ -401,11 +403,12 @@ python figures.py                              # regenerate all 9 blog figures
 ```
 
 Extract two frames from any clip:
+
 ```bash
 ffmpeg -i clip.mp4 -vf "select=eq(n\,100)+eq(n\,101)" -vsync 0 frame%d.png
 ```
 
 ---
 
-*Part of the [Math Under the Pixels](/blog/) series — classical CV, from the equations up.*
-*Next: Features + RANSAC — robust matching when half your correspondences are garbage.*
+_Part of the [Math Under the Pixels](/blog/) series — classical CV, from the equations up._
+_Next: Features + RANSAC — robust matching when half your correspondences are garbage._
