@@ -101,7 +101,45 @@ At a corner both `Iₓ` and `I_y` are large, so you get two independent constrai
 
 **Key assumption:** flow is approximately constant over a small `k×k` window.
 
-Every pixel in the window gives one constraint equation. `k²` equations, 2 unknowns → overdetermined → least squares. The normal equations collapse to a **2×2 system**:
+Every pixel in the window gives one constraint equation. For a 15×15 window that's **225 equations, 2 unknowns** — overdetermined. No exact solution exists, so we minimize total squared error (least squares). Here's how 225 equations become 2×2.
+
+### From 225 equations to a matrix
+
+Write every constraint in the window as one row:
+
+```
+pixel 1:    Ix1·u + Iy1·v = -It1
+pixel 2:    Ix2·u + Iy2·v = -It2
+...
+pixel 225:  Ix225·u + Iy225·v = -It225
+```
+
+Stack them into a matrix system `A·x = b`:
+
+```
+⎡ Ix1   Iy1  ⎤         ⎡ -It1  ⎤
+⎢ Ix2   Iy2  ⎥  [u]  = ⎢ -It2  ⎥
+⎢  ...       ⎥  [v]    ⎢  ...  ⎥
+⎣ Ix225 Iy225⎦         ⎣ -It225⎦
+    A (225×2)  · x  =    b (225×1)
+```
+
+### Least squares collapse
+
+Minimize `‖Ax − b‖²`. Take the derivative with respect to `x`, set to zero:
+
+```
+AᵀA · x  =  Aᵀb
+```
+
+`AᵀA` is **(2×225)·(225×2) = 2×2**. Expand it:
+
+```
+AᵀA = ⎡ ΣIx²    ΣIx·Iy ⎤        Aᵀb = ⎡ ΣIx·It ⎤
+      ⎣ ΣIx·Iy  ΣIy²   ⎦               ⎣ ΣIy·It ⎦
+```
+
+All 225 equations are still in there — compressed into five window sums. The full system:
 
 ```
 ⎡ ΣIₓ²    ΣIₓI_y ⎤ ⎡u⎤     ⎡ ΣIₓI_t ⎤
@@ -110,6 +148,8 @@ Every pixel in the window gives one constraint equation. `k²` equations, 2 unkn
 
        A               [u,v]        b
 ```
+
+Solve with Cramer's rule — two divisions. Done.
 
 The sums run over the `k×k` window. `A` is the **structure tensor** — the same matrix Harris and Shi-Tomasi use to find corners. Its smallest eigenvalue tells you how well the patch constrains flow:
 
@@ -145,7 +185,48 @@ To compute the 2×2 system you need **five windowed sums**: `ΣIₓ²`, `ΣI_y²
 
 **Naive:** loop over the `k×k` window per pixel. Cost: **O(k²) per pixel**.
 
-**Key insight:** a sum over a sliding rectangular window *is a box filter* — and a box filter runs in **O(1) per pixel** via a running prefix sum, regardless of window size. Replace five nested loops with five filter calls:
+For a 512×512 image with `k=15`: that's 512 × 512 × 225 ≈ **59 million additions**. Per sum. Five sums total.
+
+**Key insight:** a sum over a sliding rectangular window *is a box filter* — and a box filter runs in **O(1) per pixel** via a prefix sum table, regardless of window size.
+
+### How the prefix sum works
+
+Pre-compute a table `P` where each cell = sum of everything above-and-left:
+
+```
+Original image:      Prefix sum table P:
+  1  2  3              0   0   0   0
+  4  5  6    →         0   1   3   6
+  7  8  9              0   5  12  21
+                       0  12  21  36
+```
+
+`P[y][x]` = sum of all values in the rectangle from `(0,0)` to `(y,x)`.
+
+Now any rectangle sum = **4 lookups**, regardless of window size:
+
+```
+sum(r1,c1 → r2,c2)  =  P[r2][c2]
+                      - P[r1-1][c2]
+                      - P[r2][c1-1]
+                      + P[r1-1][c1-1]   ← add back the corner subtracted twice
+```
+
+Visual:
+
+```
++-------------------+
+|        A          |
++--------+----------+
+|   B    |  target  |
++--------+----------+
+
+target = whole − A − B + corner
+```
+
+Build `P` once — O(N). Query every pixel — O(1). A 3×3 window and a 300×300 window both cost **4 lookups**.
+
+Replace five nested loops with five filter calls:
 
 ```python
 # Before — O(k²) per pixel, explicit loop
@@ -154,7 +235,7 @@ for y in range(r, h-r):
         sxx = np.sum(Ix[y-r:y+r+1, x-r:x+r+1] ** 2)   # k² ops
         ...
 
-# After — O(1) per pixel
+# After — O(1) per pixel (uniform_filter uses prefix sums internally)
 box  = lambda x: uniform_filter(x, size=win)
 Sxx, Syy, Sxy = box(Ix*Ix), box(Iy*Iy), box(Ix*Iy)
 Sxt, Syt      = box(Ix*It), box(Iy*It)
