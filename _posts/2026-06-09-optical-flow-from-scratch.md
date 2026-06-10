@@ -10,7 +10,7 @@ featured: true
 ---
 
 > **512×512 image, 5.66 px max motion, zero neural net.**
-> Single-scale Lucas-Kanade: EPE **2.792 px**. Add a four-level pyramid: **0.752 px**.
+> Single-scale Lucas-Kanade: EPE (End-Point Error — average pixel distance between estimated and true flow) **2.792 px**. Add a four-level pyramid: **0.752 px**.
 > Change one function call (loop → box filter): **250× faster**. Same output.
 
 That's the whole post. Everything below is _why_.
@@ -31,8 +31,8 @@ That's it. No segmentation, no depth, no semantics. Just: _where did each point 
 
 This is the front end of:
 
-- **Visual odometry / SLAM** — track points, recover camera pose
-- **ADAS / drones** — ego-motion, moving-obstacle detection, time-to-collision
+- **Visual odometry / SLAM** (Simultaneous Localization and Mapping) — track points, recover camera pose
+- **ADAS** (Advanced Driver Assistance Systems) **/drones** — ego-motion, moving-obstacle detection, time-to-collision
 - **Video codecs** — motion estimation inside every H.264/AV1 encoder
 - **Video stabilization** — estimate camera shake, warp it out
 
@@ -369,7 +369,7 @@ Dense flow gives you a motion vector per pixel. If you instead track _feature po
 
 ## The fast version — where the real moat is
 
-The Python `uniform_filter` already leans on compiled C with SIMD internally. The next rung is hand-written AVX2: 8 pixels per instruction, threaded over rows.
+The Python `uniform_filter` already leans on compiled C with SIMD (Single Instruction Multiple Data) internally. The next rung is hand-written AVX2 (Intel's 256-bit SIMD extension): 8 floats per instruction, threaded over rows.
 
 ```cpp
 // Sxx, Syy, Sxy, Sxt, Syt are __m256 — 8 pixels per register
